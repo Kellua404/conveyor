@@ -14,9 +14,19 @@
 >   2. **Account is in region us-east-1** → must use `QSTASH_URL=https://qstash-us-east-1.upstash.io`
 >      (canonical qstash.upstash.io 404s "user not found in region"). The user's `.env.local`
 >      already had the correct regional URL; it's set in Vercel prod env too.
-> Free-tier delivery is slow/bursty under chaos (exponential retry backoff + sustained-rate
-> throttling) — honest behavior; UI handles it with the cold-start state. Single shared
-> `conveyor` queue = global parallelism (PLAN §13), so concurrent runs share the backlog.
+> **3. Head-of-line blocking (FIXED — important architecture change).** Originally used an
+> ordered QStash *queue* (`queue.enqueueJSON`): FIFO delivery meant one message in
+> retry-backoff blocked everything behind it, so under chaos the board froze (e.g. stuck at
+> done=2 with 1 retrying for minutes). **Switched to `qstash.publishJSON` with a shared
+> `flowControl: { key, parallelism }`** — preserves server-enforced concurrency
+> (backpressure) but retries each message *independently*. Re-tested live @ chaos 20%:
+> drained 0→12 done, 0 dead, 8 retries, all recovered, reached `complete`. The dial cap of 2
+> still applies (free-tier). Do NOT reintroduce a queue without accepting head-of-line stalls.
+>
+> Free-tier delivery is still modest (cold start ~1 min to first delivery; throttled
+> throughput) — honest behavior; UI handles it with the cold-start state. Defaults lowered
+> (chaos 10%, count 12) for a snappier first impression. Full ops/troubleshooting guide
+> lives in `README.md` → "Troubleshooting / Operations".
 >
 > **✅ MAKE-OR-BREAK MILESTONE PASSED (PLAN §11 step 2):** with creds in `.env.local`,
 > dispatched 12 items @ parallelism 3 / chaos 25%. Verified live: QStash genuinely
