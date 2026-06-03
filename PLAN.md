@@ -2,9 +2,21 @@
 
 > ## ⏱ BUILD PROGRESS (live log — updated by the build session)
 >
-> **Status:** 🟢 Codebase complete & **queue loop PROVEN end-to-end locally** against a
-> real QStash dev server + the user's real Upstash Redis. Only the Vercel deploy (§18)
-> remains, which needs the user's GitHub + Vercel.
+> **Status:** 🟢 **DEPLOYED & LIVE on Vercel — working end-to-end.**
+> Live URL: https://conveyor-lyart.vercel.app · Repo (private): github.com/Kellua404/conveyor
+>
+> Verified on the live deploy: real QStash deliveries to `/api/worker` (QStash event log
+> showed 25 DELIVERED 200 + 18 ERROR→RETRY from chaos), items move QUEUED→DONE with real
+> retries + recovery (attempt badges hit 2–3), idempotent, honest telemetry, dead-letter
+> clean. Two real findings handled:
+>   1. **QStash free tier caps queue parallelism at 2** (parallelism≥3 → quota 500). Fixed:
+>      dial clamped to 1–2 via `lib/constants.ts`, surfaced as "free-tier cap 2" in UI.
+>   2. **Account is in region us-east-1** → must use `QSTASH_URL=https://qstash-us-east-1.upstash.io`
+>      (canonical qstash.upstash.io 404s "user not found in region"). The user's `.env.local`
+>      already had the correct regional URL; it's set in Vercel prod env too.
+> Free-tier delivery is slow/bursty under chaos (exponential retry backoff + sustained-rate
+> throttling) — honest behavior; UI handles it with the cold-start state. Single shared
+> `conveyor` queue = global parallelism (PLAN §13), so concurrent runs share the backlog.
 >
 > **✅ MAKE-OR-BREAK MILESTONE PASSED (PLAN §11 step 2):** with creds in `.env.local`,
 > dispatched 12 items @ parallelism 3 / chaos 25%. Verified live: QStash genuinely
@@ -34,15 +46,18 @@
 > - [x] A11y/motion baked in: reduced-motion (CSS + framer), aria-valuetext sliders,
 >       aria-live status, sr-only tile state, focus rings, state never color-only.
 > - [x] Creds in `.env.local` verified working (Redis round-trip + QStash token valid).
-> - [x] **Local end-to-end loop proven** with `qstash-cli dev` (see milestone above).
-> - [ ] **REMAINING (user's step):** §18 deploy — push to a private GitHub repo, import to
->       Vercel + add the 5 env vars (use the **production** QStash keys, set
->       `CONVEYOR_APP_URL` to the prod domain), deploy, smoke-test on the live URL, then
->       check off the §17 Definition-of-Done items.
+> - [x] **Local end-to-end loop proven** with `qstash-cli dev`.
+> - [x] **Pushed to private GitHub repo** (github.com/Kellua404/conveyor).
+> - [x] **Deployed to Vercel** with all 6 env vars (5 + regional `QSTASH_URL`) +
+>       `CONVEYOR_APP_URL=https://conveyor-lyart.vercel.app`.
+> - [x] **Smoke-tested on the live URL — confirmed working** (real deliveries, retries,
+>       recovery; see status block above).
 >
-> **Local dev recipe (works now):** terminal 1: `npx @upstash/qstash-cli dev` · terminal 2:
-> `npm run dev` → open http://localhost:3000 and dispatch. (`.env.development.local`
-> already wires QStash to the local dev server.)
+> **Local dev recipe:** terminal 1: `npx @upstash/qstash-cli dev` · terminal 2:
+> `npm run dev` → http://localhost:3000. (`.env.development.local` wires QStash to the
+> local dev server.)
+>
+> **Deploy/update recipe:** `vercel --prod --yes` (env vars already set on Vercel).
 >
 > ---
 
