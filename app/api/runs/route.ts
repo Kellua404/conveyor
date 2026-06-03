@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { nanoid } from "nanoid";
-import { qstash, QUEUE_NAME, MAX_ATTEMPTS, workerUrl } from "@/lib/qstash";
+import { qstash, FLOW_CONTROL_KEY, MAX_ATTEMPTS, workerUrl } from "@/lib/qstash";
 import { redis } from "@/lib/redis";
 import { RUN_TTL, runKey, itemKey, idsKey } from "@/lib/run";
 import { genSamples } from "@/lib/samples";
@@ -61,16 +61,17 @@ export async function POST(req: Request) {
   await redis.expire(runKey(runId), RUN_TTL);
   await redis.expire(idsKey(runId), RUN_TTL);
 
-  // 2) set backpressure, then enqueue one QStash message per item
+  // 2) publish one QStash message per item with a shared flow-control key, so
+  // QStash enforces `parallelism` concurrency (backpressure) while retrying each
+  // message independently (no FIFO head-of-line blocking under chaos).
   try {
-    const queue = qstash.queue({ queueName: QUEUE_NAME });
-    await queue.upsert({ parallelism });
     await Promise.all(
       items.map((_, idx) =>
-        queue.enqueueJSON({
+        qstash.publishJSON({
           url: workerUrl(),
           body: { runId, itemId: String(idx) },
           retries: MAX_ATTEMPTS, // QStash will redeliver up to this many times on 5xx
+          flowControl: { key: FLOW_CONTROL_KEY, parallelism },
         })
       )
     );

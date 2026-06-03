@@ -1,6 +1,9 @@
 import { Client, Receiver } from "@upstash/qstash";
 
-export const QUEUE_NAME = "conveyor";
+// Flow-control key: QStash enforces a shared `parallelism` limit across every
+// message published with this key (server-side backpressure) WITHOUT FIFO
+// ordering — so a message being retried doesn't head-of-line-block the others.
+export const FLOW_CONTROL_KEY = "conveyor";
 export const MAX_ATTEMPTS = 4; // total tries before an item is dead-lettered
 
 export const qstash = new Client({ token: process.env.QSTASH_TOKEN! });

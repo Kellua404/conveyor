@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { qstash, QUEUE_NAME, MAX_ATTEMPTS, workerUrl } from "@/lib/qstash";
+import { qstash, FLOW_CONTROL_KEY, MAX_ATTEMPTS, workerUrl } from "@/lib/qstash";
 import { redis } from "@/lib/redis";
 import { runKey, itemKey, logEvent } from "@/lib/run";
 
@@ -41,11 +41,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   await redis.hincrby(runKey(runId), "dead", -1);
   await logEvent(runId, `item#${itemId} re-queued (manual retry)`);
 
-  const queue = qstash.queue({ queueName: QUEUE_NAME });
-  await queue.enqueueJSON({
+  // re-publish on the same flow-control key (reuse this run's parallelism).
+  const parallelism = Math.max(1, Number((await redis.hget(runKey(runId), "parallelism")) ?? 2));
+  await qstash.publishJSON({
     url: workerUrl(),
     body: { runId, itemId: String(itemId) },
     retries: MAX_ATTEMPTS,
+    flowControl: { key: FLOW_CONTROL_KEY, parallelism },
   });
 
   return NextResponse.json({ ok: true });

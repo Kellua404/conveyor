@@ -17,10 +17,12 @@ services, $0**.
 Every item is a **real message on a real queue** ([Upstash QStash](https://upstash.com/docs/qstash)).
 QStash re-invokes the Vercel function `POST /api/worker` over HTTP for each item, with:
 
-- **Server-enforced concurrency** — QStash queue `parallelism` caps how many items run at
-  once (backpressure). Raise the items, set parallelism = 1, and watch them go one at a
-  time. (The QStash **free tier caps parallelism at 2**, so the dial is 1–2 — enough to
-  see backpressure while honoring the "$0, no paid services" constraint.)
+- **Server-enforced concurrency** — every message is published with a shared QStash
+  **flow-control key**, so QStash caps how many run at once (`parallelism` = backpressure)
+  while retrying each message **independently** — no FIFO head-of-line blocking, so one
+  retrying item never freezes the rest. Set parallelism = 1 vs 2 to see the cap. (The
+  QStash **free tier caps parallelism at 2**, so the dial is 1–2 — enough to see
+  backpressure while honoring the "$0, no paid services" constraint.)
 - **Automatic retry with backoff** — a transient failure returns `500`; QStash redelivers
   with backoff. The **chaos %** dial injects transient failures so you can watch the
   system recover.
@@ -140,12 +142,17 @@ won't route to it**. Set `QSTASH_URL` to the regional endpoint (e.g.
 must be set in `.env.local` **and** in Vercel's production env. (Find the right URL in the
 Upstash QStash console's `.env` snippet.)
 
-**Items enqueue but nothing moves on the board for 1–2 min, then drains in slow bursts.**
-Not a bug — this is **QStash free-tier delivery behavior**: it delivers a small burst, then
-throttles for a minute+, then bursts again. Chaos makes it slower (every transient failure
-reschedules with exponential backoff). Mitigations: keep the default chaos low
-(`DEFAULT_CHAOS`), keep batches small, and let the UI's cold-start state set expectations.
-A paid QStash plan removes the throttle.
+**Items enqueue but nothing moves on the board for a while, then drains in bursts.**
+Two causes, both addressed:
+- *Head-of-line blocking (fixed):* we originally used an **ordered QStash queue**
+  (`queue.enqueueJSON`), where a single retrying message blocks everything behind it during
+  its backoff — under chaos the board looked frozen. Now we publish with a **flow-control
+  key** (`qstash.publishJSON({ flowControl: { key, parallelism } })`), which keeps the
+  concurrency cap but retries each message independently. If you ever reintroduce a queue,
+  expect this behavior back.
+- *Free-tier delivery (inherent):* the cold start before the first delivery can take ~1 min,
+  and free-tier throughput is modest. Keep `DEFAULT_CHAOS` low and batches small; a paid
+  QStash plan raises the limits.
 
 **QStash calls the worker but it 401s (`bad signature`) every time.**
 The signing keys are wrong/mismatched. Ensure `QSTASH_CURRENT_SIGNING_KEY` /
