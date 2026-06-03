@@ -58,13 +58,13 @@ export function ControlRoom({ runId }: { runId?: string }) {
           </Panel>
         </div>
 
-        {/* right column: board (top) + wire (bottom) */}
+        {/* right column: board (sized to content) + wire (fills the rest) */}
         <div className="bg-bg flex flex-col min-h-0">
-          <div className="p-4 sm:p-6 flex-1 min-h-[360px]">
+          <div className="p-4 sm:p-6 shrink-0">
             <SectionLabel>Board</SectionLabel>
             <Board snap={snap} />
           </div>
-          <div className="border-t border-line p-4 sm:p-6 h-[34vh] min-h-[200px] max-h-[420px]">
+          <div className="border-t border-line p-4 sm:p-6 flex-1 min-h-[200px]">
             <Wire snap={snap} />
           </div>
         </div>

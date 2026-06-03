@@ -1,11 +1,13 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)"
+    ]
+  },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "code-review-graph"
-  ],
-  "permissions": {
-    "allow": [
-      "Bash(npm install *)"
-    ]
-  }
+  ]
 }

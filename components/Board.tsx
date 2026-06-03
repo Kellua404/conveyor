@@ -40,8 +40,8 @@ export function Board({ snap }: { snap: Snapshot | null }) {
 
   return (
     <LayoutGroup>
-      <div className="flex flex-col h-full">
-        <div className="flex gap-3 flex-1">
+      <div className="flex flex-col">
+        <div className="flex gap-3 items-start min-h-[160px]">
           {LANES.map((lane) => (
             <Lane key={lane} label={lane} items={byLane[lane]} accent={lane === "DONE"} />
           ))}
