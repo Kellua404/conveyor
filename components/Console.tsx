@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Play, RotateCw } from "lucide-react";
 import { useRun } from "@/store/useRun";
+import { MAX_ITEMS, MAX_PARALLELISM, MAX_CHAOS, DEFAULT_PARALLELISM, DEFAULT_CHAOS } from "@/lib/constants";
 
 type Mode = "count" | "paste";
 
@@ -11,8 +12,8 @@ export function Console() {
   const [mode, setMode] = useState<Mode>("count");
   const [count, setCount] = useState(20);
   const [text, setText] = useState("");
-  const [parallelism, setParallelism] = useState(3);
-  const [chaos, setChaos] = useState(25);
+  const [parallelism, setParallelism] = useState(DEFAULT_PARALLELISM);
+  const [chaos, setChaos] = useState(DEFAULT_CHAOS);
 
   const inFlight = snap?.status === "running";
   const busy = dispatching || inFlight;
@@ -45,7 +46,7 @@ export function Console() {
           <SliderRow
             value={count}
             min={1}
-            max={50}
+            max={MAX_ITEMS}
             onChange={setCount}
             disabled={busy}
             valueText={`${count} items`}
@@ -64,11 +65,11 @@ export function Console() {
         )}
       </Field>
 
-      <Field label="Parallelism" hint="server-enforced concurrency">
+      <Field label="Parallelism" hint="free-tier cap 2">
         <SliderRow
           value={parallelism}
           min={1}
-          max={5}
+          max={MAX_PARALLELISM}
           onChange={setParallelism}
           disabled={busy}
           valueText={`parallelism ${parallelism}`}
@@ -80,7 +81,7 @@ export function Console() {
         <SliderRow
           value={chaos}
           min={0}
-          max={40}
+          max={MAX_CHAOS}
           onChange={setChaos}
           disabled={busy}
           valueText={`chaos ${chaos} percent`}

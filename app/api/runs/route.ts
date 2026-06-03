@@ -4,11 +4,11 @@ import { qstash, QUEUE_NAME, MAX_ATTEMPTS, workerUrl } from "@/lib/qstash";
 import { redis } from "@/lib/redis";
 import { RUN_TTL, runKey, itemKey, idsKey } from "@/lib/run";
 import { genSamples } from "@/lib/samples";
+import { MAX_ITEMS, MAX_PARALLELISM, MAX_CHAOS, DEFAULT_PARALLELISM } from "@/lib/constants";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-const MAX_ITEMS = 50;
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
 export async function POST(req: Request) {
@@ -20,8 +20,8 @@ export async function POST(req: Request) {
   }
 
   const { lines, count } = payload;
-  const parallelism = clamp(Math.round(payload.parallelism ?? 3), 1, 5);
-  const chaos = clamp(Math.round(payload.chaos ?? 0), 0, 40);
+  const parallelism = clamp(Math.round(payload.parallelism ?? DEFAULT_PARALLELISM), 1, MAX_PARALLELISM);
+  const chaos = clamp(Math.round(payload.chaos ?? 0), 0, MAX_CHAOS);
 
   // items: either user-pasted lines, or N generated samples. Cap hard.
   const source = lines?.length ? lines.map((l) => l.trim()).filter(Boolean) : genSamples(clamp(count ?? 20, 1, MAX_ITEMS));
@@ -62,17 +62,22 @@ export async function POST(req: Request) {
   await redis.expire(idsKey(runId), RUN_TTL);
 
   // 2) set backpressure, then enqueue one QStash message per item
-  const queue = qstash.queue({ queueName: QUEUE_NAME });
-  await queue.upsert({ parallelism });
-  await Promise.all(
-    items.map((_, idx) =>
-      queue.enqueueJSON({
-        url: workerUrl(),
-        body: { runId, itemId: String(idx) },
-        retries: MAX_ATTEMPTS, // QStash will redeliver up to this many times on 5xx
-      })
-    )
-  );
+  try {
+    const queue = qstash.queue({ queueName: QUEUE_NAME });
+    await queue.upsert({ parallelism });
+    await Promise.all(
+      items.map((_, idx) =>
+        queue.enqueueJSON({
+          url: workerUrl(),
+          body: { runId, itemId: String(idx) },
+          retries: MAX_ATTEMPTS, // QStash will redeliver up to this many times on 5xx
+        })
+      )
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: `queue error: ${message}` }, { status: 502 });
+  }
 
   return NextResponse.json({ runId });
 }

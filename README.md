@@ -17,9 +17,10 @@ services, $0**.
 Every item is a **real message on a real queue** ([Upstash QStash](https://upstash.com/docs/qstash)).
 QStash re-invokes the Vercel function `POST /api/worker` over HTTP for each item, with:
 
-- **Server-enforced concurrency** — QStash queue `parallelism` (1–5) caps how many items
-  run at once (backpressure). Raise the items, set parallelism = 1, and watch them go
-  one at a time.
+- **Server-enforced concurrency** — QStash queue `parallelism` caps how many items run at
+  once (backpressure). Raise the items, set parallelism = 1, and watch them go one at a
+  time. (The QStash **free tier caps parallelism at 2**, so the dial is 1–2 — enough to
+  see backpressure while honoring the "$0, no paid services" constraint.)
 - **Automatic retry with backoff** — a transient failure returns `500`; QStash redelivers
   with backoff. The **chaos %** dial injects transient failures so you can watch the
   system recover.
@@ -108,8 +109,9 @@ Then dispatch a batch (e.g. 30 items, parallelism 3, chaos 25%) and watch the be
 
 ## Free-tier notes / limits
 
-- Batches are capped at **50 items**; the snapshot poll runs at **500ms**; runs **TTL at
-  24h** in Redis — all to stay comfortably inside free tiers.
+- Batches are capped at **50 items**; queue **parallelism caps at 2** (QStash free-tier
+  quota); the snapshot poll runs at **500ms**; runs **TTL at 24h** in Redis — all to stay
+  comfortably inside free tiers.
 - Queue parallelism is **queue-global** (single `conveyor` queue) — fine for a
   single-user demo. (Stretch: queue-per-run.)
 - Cold starts: the first dispatch may lag while the function spins up; the UI shows a calm
