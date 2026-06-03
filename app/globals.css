@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0b0d11; /* near-black cool ink */
+  --surface: #11141a; /* lifted panel */
+  --surface-2: #161a22; /* lane / card */
+  --line: #232834; /* hairline grid + borders */
+  --text: #e7ebf2; /* primary */
+  --text-dim: #8b93a3; /* labels, secondary */
+  --accent: #f5a623; /* SIGNAL AMBER — things in motion */
+
+  /* job-state colors (the core visual language) */
+  --state-queued: #5b6573; /* slate */
+  --state-running: #f5a623; /* amber (pulses) */
+  --state-done: #3fb98c; /* green */
+  --state-retrying: #9b7bf0; /* violet (flash on retry) */
+  --state-dead: #e5544b; /* red */
+}
+
+* {
+  border-color: var(--line);
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: var(--font-space-grotesk), system-ui, sans-serif;
+}
+
+/* hairline technical grid — the control-room substrate */
+.grid-substrate {
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: -1px -1px;
+}
+
+/* tabular figures for instrument readouts */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+}
+
+/* thin custom scrollbar for the wire log */
+.wire-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.wire-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.wire-scroll::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 4px;
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: var(--line);
+  border-radius: 999px;
+  outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 0 1px var(--line);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: 2px solid var(--bg);
+}
+input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.4);
+}
+
+/* visible focus rings everywhere */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
