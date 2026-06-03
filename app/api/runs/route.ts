@@ -4,7 +4,7 @@ import { qstash, QUEUE_NAME, MAX_ATTEMPTS, workerUrl } from "@/lib/qstash";
 import { redis } from "@/lib/redis";
 import { RUN_TTL, runKey, itemKey, idsKey } from "@/lib/run";
 import { genSamples } from "@/lib/samples";
-import { MAX_ITEMS, MAX_PARALLELISM, MAX_CHAOS, DEFAULT_PARALLELISM } from "@/lib/constants";
+import { MAX_ITEMS, MAX_PARALLELISM, MAX_CHAOS, DEFAULT_PARALLELISM, DEFAULT_COUNT } from "@/lib/constants";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   const chaos = clamp(Math.round(payload.chaos ?? 0), 0, MAX_CHAOS);
 
   // items: either user-pasted lines, or N generated samples. Cap hard.
-  const source = lines?.length ? lines.map((l) => l.trim()).filter(Boolean) : genSamples(clamp(count ?? 20, 1, MAX_ITEMS));
+  const source = lines?.length ? lines.map((l) => l.trim()).filter(Boolean) : genSamples(clamp(count ?? DEFAULT_COUNT, 1, MAX_ITEMS));
   const items = source.slice(0, MAX_ITEMS);
   if (items.length === 0) {
     return NextResponse.json({ error: "no items to dispatch" }, { status: 400 });

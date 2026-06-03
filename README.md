@@ -98,12 +98,15 @@ Then dispatch a batch (e.g. 30 items, parallelism 3, chaos 25%) and watch the be
 1. Push to a **private** GitHub repo. (`.gitignore` already excludes `.env*` — secrets
    live only in `.env.local` / Vercel env, never committed.)
 2. Import the repo into **Vercel**.
-3. Add the 5 env vars in Vercel: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`,
-   `QSTASH_TOKEN`, `QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY`. Optionally set
-   `CONVEYOR_APP_URL` to the production domain (otherwise `VERCEL_URL` is used).
+3. Add the env vars in Vercel: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`,
+   `QSTASH_TOKEN`, `QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY`, and — **if your
+   Upstash account is in a non-default region** — `QSTASH_URL` (e.g.
+   `https://qstash-us-east-1.upstash.io`; see Troubleshooting). Set `CONVEYOR_APP_URL` to
+   the production domain (otherwise `VERCEL_URL` is used).
    > Use the **production** QStash token + signing keys here, *not* the dev-server ones.
-4. Deploy, then smoke-test on the live URL: dispatch 30 items @ parallelism 3, chaos 25%
-   — confirm retries (violet flashes), recovery, dead-letter, and the receipt.
+4. Deploy (`vercel --prod` from the CLI, or via the Git integration), then smoke-test on
+   the live URL: dispatch ~12 items @ parallelism 2, chaos ~10% — confirm items drain,
+   retries (violet flashes) recover, dead-letter, and the receipt.
 
 ---
 
@@ -116,6 +119,50 @@ Then dispatch a batch (e.g. 30 items, parallelism 3, chaos 25%) and watch the be
   single-user demo. (Stretch: queue-per-run.)
 - Cold starts: the first dispatch may lag while the function spins up; the UI shows a calm
   "Cold start — waiting for the first delivery…" state, never a fake progress bar.
+
+---
+
+## Troubleshooting / Operations
+
+> A field guide to the gotchas already hit, so future changes are quick to debug.
+> Diagnose QStash directly via its REST API at **your `QSTASH_URL`** (see below):
+> `GET /v2/queues/conveyor` (depth = `lag`) and `GET /v2/events?queueName=conveyor`
+> (per-delivery `state`/`responseStatus`), both with `Authorization: Bearer $QSTASH_TOKEN`.
+
+**Dispatch returns 500 with `quota maxParallelism`.**
+The QStash **free tier caps queue parallelism at 2**. The dial is clamped to 1–2 in
+`lib/constants.ts` (`MAX_PARALLELISM`). If you upgrade the QStash plan, raise that constant.
+
+**Dispatch returns 500 / enqueue fails with `user not found in this region`.**
+Your Upstash account lives in a specific region and the **canonical `https://qstash.upstash.io`
+won't route to it**. Set `QSTASH_URL` to the regional endpoint (e.g.
+`https://qstash-us-east-1.upstash.io`) — the SDK reads `QSTASH_URL` as its base URL. This
+must be set in `.env.local` **and** in Vercel's production env. (Find the right URL in the
+Upstash QStash console's `.env` snippet.)
+
+**Items enqueue but nothing moves on the board for 1–2 min, then drains in slow bursts.**
+Not a bug — this is **QStash free-tier delivery behavior**: it delivers a small burst, then
+throttles for a minute+, then bursts again. Chaos makes it slower (every transient failure
+reschedules with exponential backoff). Mitigations: keep the default chaos low
+(`DEFAULT_CHAOS`), keep batches small, and let the UI's cold-start state set expectations.
+A paid QStash plan removes the throttle.
+
+**QStash calls the worker but it 401s (`bad signature`) every time.**
+The signing keys are wrong/mismatched. Ensure `QSTASH_CURRENT_SIGNING_KEY` /
+`QSTASH_NEXT_SIGNING_KEY` in Vercel match the **production** keys (not the `qstash-cli dev`
+keys, which only belong in `.env.development.local`).
+
+**QStash can't reach the worker at all (no `POST /api/worker` in Vercel logs).**
+`CONVEYOR_APP_URL` must be a **public** URL. In prod that's the Vercel domain; locally you
+must run `npx @upstash/qstash-cli dev` (QStash can't reach `localhost` otherwise). Also
+confirm Vercel **Deployment Protection** isn't gating the production URL.
+
+**Clear a stuck/backlogged queue (e.g. after heavy testing):**
+`curl -X DELETE "$QSTASH_URL/v2/queues/conveyor" -H "Authorization: Bearer $QSTASH_TOKEN"`
+— the app recreates the queue (via `upsert`) on the next dispatch.
+
+**Redeploy after a change:** `vercel --prod --yes` (env vars persist on Vercel). Env vars
+live only in `.env.local` (local) and Vercel's encrypted store — never committed.
 
 ---
 

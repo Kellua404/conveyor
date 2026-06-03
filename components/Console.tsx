@@ -3,14 +3,21 @@
 import { useState } from "react";
 import { Play, RotateCw } from "lucide-react";
 import { useRun } from "@/store/useRun";
-import { MAX_ITEMS, MAX_PARALLELISM, MAX_CHAOS, DEFAULT_PARALLELISM, DEFAULT_CHAOS } from "@/lib/constants";
+import {
+  MAX_ITEMS,
+  MAX_PARALLELISM,
+  MAX_CHAOS,
+  DEFAULT_PARALLELISM,
+  DEFAULT_CHAOS,
+  DEFAULT_COUNT,
+} from "@/lib/constants";
 
 type Mode = "count" | "paste";
 
 export function Console() {
   const { snap, dispatch, dispatching, error, reset } = useRun();
   const [mode, setMode] = useState<Mode>("count");
-  const [count, setCount] = useState(20);
+  const [count, setCount] = useState(DEFAULT_COUNT);
   const [text, setText] = useState("");
   const [parallelism, setParallelism] = useState(DEFAULT_PARALLELISM);
   const [chaos, setChaos] = useState(DEFAULT_CHAOS);

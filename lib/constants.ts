@@ -8,4 +8,8 @@ export const MAX_CHAOS = 40; // max transient-failure injection %
 // demonstrates server-enforced backpressure.
 export const MAX_PARALLELISM = 2;
 export const DEFAULT_PARALLELISM = 2;
-export const DEFAULT_CHAOS = 25;
+// Default chaos is modest so the first dispatch drains fast/clean on the QStash
+// free tier (every failure reschedules with backoff, which is slow there). The
+// "try to break it" story is cranking this up toward MAX_CHAOS.
+export const DEFAULT_CHAOS = 10;
+export const DEFAULT_COUNT = 12;
