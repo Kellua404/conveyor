@@ -7,14 +7,14 @@ export function Wire({ snap }: { snap: Snapshot | null }) {
   const t0 = snap?.events.length ? Math.min(...snap.events.map((e) => e.ts)) : 0;
   const events = snap?.events ?? [];
 
-  // auto-scroll to the newest line, like a terminal — unless the user has
-  // scrolled up to read history, in which case we leave their position alone.
+  // events arrive newest-first (server lpush), so the latest line sits at the
+  // TOP. Keep the box pinned to the top as new lines stream in — unless the
+  // user has scrolled down to read history, then leave their position alone.
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
-    if (nearBottom) el.scrollTop = el.scrollHeight;
+    if (el.scrollTop < 48) el.scrollTop = 0;
   }, [events.length]);
 
   return (
