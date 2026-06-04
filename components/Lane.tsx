@@ -13,7 +13,7 @@ export function Lane({
   accent?: boolean;
 }) {
   return (
-    <div className="flex flex-col min-w-0 flex-1">
+    <div className="flex flex-col flex-1 min-w-[6.5rem]">
       <div className="flex items-baseline justify-between px-1 pb-2 mb-2 border-b">
         <span
           className={`text-[10px] font-medium tracking-[0.14em] uppercase ${

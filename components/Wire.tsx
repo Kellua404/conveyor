@@ -1,11 +1,21 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { Snapshot, WireEvent } from "@/store/useRun";
 
 export function Wire({ snap }: { snap: Snapshot | null }) {
   const t0 = snap?.events.length ? Math.min(...snap.events.map((e) => e.ts)) : 0;
   const events = snap?.events ?? [];
+
+  // auto-scroll to the newest line, like a terminal — unless the user has
+  // scrolled up to read history, in which case we leave their position alone.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+    if (nearBottom) el.scrollTop = el.scrollHeight;
+  }, [events.length]);
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -14,7 +24,8 @@ export function Wire({ snap }: { snap: Snapshot | null }) {
         <span className="h-1.5 w-1.5 rounded-full bg-accent animate-breathe" aria-hidden />
       </div>
       <div
-        className="wire-scroll flex-1 min-h-0 overflow-y-auto rounded-md bg-surface-2/60 border border-line p-2.5 space-y-0.5"
+        ref={scrollRef}
+        className="wire-scroll flex-1 min-h-0 max-h-[45vh] lg:max-h-none overflow-y-auto rounded-md bg-surface-2/60 border border-line p-2.5 space-y-0.5"
         role="log"
         aria-label="Event wire"
         aria-live="off"

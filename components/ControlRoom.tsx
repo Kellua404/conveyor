@@ -26,7 +26,7 @@ export function ControlRoom({ runId }: { runId?: string }) {
   const complete = snap?.status === "complete";
 
   return (
-    <div className="min-h-screen grid-substrate flex flex-col">
+    <div className="min-h-screen lg:h-screen lg:overflow-hidden grid-substrate flex flex-col">
       {/* header */}
       <header className="flex items-center justify-between px-4 sm:px-6 h-14 border-b border-line bg-surface/60 backdrop-blur-sm">
         <Wordmark />
@@ -44,7 +44,7 @@ export function ControlRoom({ runId }: { runId?: string }) {
       {/* main grid */}
       <main className="flex-1 grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-px bg-line/40 min-h-0">
         {/* left column: console + receipt + telemetry */}
-        <div className="bg-bg flex flex-col">
+        <div className="bg-bg flex flex-col lg:min-h-0 lg:overflow-y-auto">
           <Panel title="Console">
             <Console />
           </Panel>

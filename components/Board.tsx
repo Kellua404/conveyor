@@ -41,7 +41,9 @@ export function Board({ snap }: { snap: Snapshot | null }) {
   return (
     <LayoutGroup>
       <div className="flex flex-col">
-        <div className="flex gap-3 items-start min-h-[160px]">
+        {/* lanes: on narrow screens they keep a min width and scroll
+            horizontally instead of crushing into overlapping labels */}
+        <div className="flex gap-3 items-start min-h-[160px] overflow-x-auto pb-1 -mx-1 px-1 wire-scroll">
           {LANES.map((lane) => (
             <Lane key={lane} label={lane} items={byLane[lane]} accent={lane === "DONE"} />
           ))}
