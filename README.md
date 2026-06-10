@@ -2,7 +2,7 @@
 
 > A job pipeline you can watch — serverless queue, retries, dead-letter, all $0. Next.js + QStash + Redis.
 
-**[Live demo](https://conveyor-lyart.vercel.app)** · part of [my portfolio](https://portfolio-delta-snowy-rw5w2y5pf8.vercel.app)
+**[Live demo](https://conveyor.ayoubalkak.com)** · part of [my portfolio](https://ayoubalkak.com)
 
 ![Conveyor](docs/poster.jpg)
 
