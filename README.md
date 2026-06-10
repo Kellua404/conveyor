@@ -1,5 +1,11 @@
 # Conveyor
 
+> A job pipeline you can watch — serverless queue, retries, dead-letter, all $0. Next.js + QStash + Redis.
+
+**[Live demo](https://conveyor-lyart.vercel.app)** · part of [my portfolio](https://portfolio-delta-snowy-rw5w2y5pf8.vercel.app)
+
+![Conveyor](docs/poster.jpg)
+
 **A job pipeline you can watch.** Dispatch a batch of work and see every item ride the
 belt through each stage — fetch, transform, validate — failing, retrying, and recovering
 in real time. Built entirely serverless on Vercel: **no always-on worker, no paid
@@ -97,8 +103,8 @@ Then dispatch a batch (e.g. 30 items, parallelism 3, chaos 25%) and watch the be
 
 ## Deploy (Vercel)
 
-1. Push to a **private** GitHub repo. (`.gitignore` already excludes `.env*` — secrets
-   live only in `.env.local` / Vercel env, never committed.)
+1. Push to GitHub. (`.gitignore` already excludes `.env*` — secrets live only in
+   `.env.local` / Vercel env, never committed.)
 2. Import the repo into **Vercel**.
 3. Add the env vars in Vercel: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`,
    `QSTASH_TOKEN`, `QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY`, and — **if your
