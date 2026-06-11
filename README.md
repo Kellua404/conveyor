@@ -1,6 +1,6 @@
 # Conveyor
 
-> A job pipeline you can watch — serverless queue, retries, dead-letter, all $0. Next.js + QStash + Redis.
+> A job pipeline you can watch — serverless queue, retries, dead-letter, observable end to end. Next.js + QStash + Redis.
 
 **[Live demo](https://conveyor.ayoubalkak.com)** · part of [my portfolio](https://ayoubalkak.com)
 
@@ -9,7 +9,7 @@
 **A job pipeline you can watch.** Dispatch a batch of work and see every item ride the
 belt through each stage — fetch, transform, validate — failing, retrying, and recovering
 in real time. Built entirely serverless on Vercel: **no always-on worker, no paid
-services, $0**.
+services**.
 
 > Portfolio project **B2** (backend). Where Resonance (B1) proved *"a real model
 > server-side,"* Conveyor proves *distributed systems*: queues, bounded concurrency,
@@ -28,7 +28,7 @@ QStash re-invokes the Vercel function `POST /api/worker` over HTTP for each item
   while retrying each message **independently** — no FIFO head-of-line blocking, so one
   retrying item never freezes the rest. Set parallelism = 1 vs 2 to see the cap. (The
   QStash **free tier caps parallelism at 2**, so the dial is 1–2 — enough to see
-  backpressure while honoring the "$0, no paid services" constraint.)
+  backpressure while honoring the no-paid-services constraint.)
 - **Automatic retry with backoff** — a transient failure returns `500`; QStash redelivers
   with backoff. The **chaos %** dial injects transient failures so you can watch the
   system recover.
@@ -62,7 +62,7 @@ belt is watchable.
 | **Zustand** | Tiny client store for the polled snapshot + UI dials. |
 | **Framer Motion** | Shared-layout animation — tiles glide between lanes like cargo. |
 | **Tailwind CSS** | Control-room styling with design tokens. |
-| **html-to-image** | Client-side PNG export of the run receipt ($0, no server render). |
+| **html-to-image** | Client-side PNG export of the run receipt (no server render). |
 | **Space Grotesk + JetBrains Mono** | Engineered display + true console mono. |
 
 ---
