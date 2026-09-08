@@ -87,11 +87,14 @@ export const useRun = create<State>((set, get) => ({
     ctrl = new AbortController();
     const base = { ...snap, dead: snap.dead - 1, status: "running" as const };
     set({ snap: base, error: null });
+    let seen = 0; // mini-run events already copied onto the wire (they arrive newest first)
     try {
       await readRun({ lines: [item.text], parallelism: snap.parallelism, chaos: snap.chaos }, ctrl.signal, (mini) => {
         const cur = get().snap;
         if (!cur) return;
         const m = mini.items[0];
+        const fresh = mini.events.slice(0, Math.max(0, mini.events.length - seen));
+        seen = mini.events.length;
         const items = cur.items.map((x) => (x.idx === idx ? { ...m, idx, text: x.text, attempts: item.attempts + m.attempts } : x));
         const finished = mini.status === "complete";
         set({
@@ -103,7 +106,7 @@ export const useRun = create<State>((set, get) => ({
             retries: cur.retries + (finished ? mini.retries : 0),
             inFlight: items.filter((x) => x.status === "running").length,
             items,
-            events: [...mini.events.map((e) => ({ ...e, msg: e.msg.replace(/item#0\b/g, `item#${idx}`).replace(/^run \S+/, "retry") })), ...cur.events].slice(0, 50),
+            events: [...fresh.map((e) => ({ ...e, msg: e.msg.replace(/item#0\b/g, `item#${idx}`).replace(/^run \S+/, "retry") })), ...cur.events].slice(0, 50),
           },
         });
       });
