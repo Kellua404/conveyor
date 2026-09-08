@@ -72,7 +72,7 @@ export function Console() {
         )}
       </Field>
 
-      <Field label="Parallelism" hint="free-tier cap 2">
+      <Field label="Parallelism" hint="workers in the pool">
         <SliderRow
           value={parallelism}
           min={1}

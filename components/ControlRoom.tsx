@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
 import { useRun } from "@/store/useRun";
 import { Wordmark } from "./Wordmark";
 import { Console } from "./Console";
@@ -11,17 +10,10 @@ import { Receipt } from "./Receipt";
 import { StatusBar } from "./StatusBar";
 import { About } from "./About";
 
-const ENV_PROOF = "serverless · QStash queue · Upstash Redis · no always-on worker · $0";
+const ENV_PROOF = "serverless · own in-process queue · no broker, no database · no always-on worker";
 
-export function ControlRoom({ runId }: { runId?: string }) {
-  const { snap, dispatching, watch, stop } = useRun();
-
-  // permalink hydration: if mounted with a runId, start watching it.
-  useEffect(() => {
-    if (runId) watch(runId);
-    return () => stop();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runId]);
+export function ControlRoom() {
+  const { snap, dispatching } = useRun();
 
   const complete = snap?.status === "complete";
 

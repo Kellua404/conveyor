@@ -1,41 +1,9 @@
 import { create } from "zustand";
+import type { Snapshot as ServerSnapshot, Item } from "@/lib/queue";
 
-export type ItemSnapshot = {
-  idx: number;
-  status: "queued" | "running" | "done" | "retrying" | "dead";
-  stage: string;
-  attempts: number;
-  ms: number | null;
-  error: string | null;
-  text: string;
-  result: {
-    words?: number;
-    chars?: number;
-    readability?: number;
-    keyword?: string;
-    checksum?: string;
-  } | null;
-};
-
+export type ItemSnapshot = Item;
 export type WireEvent = { ts: number; msg: string };
-
-export type Snapshot = {
-  id: string;
-  status: "running" | "complete";
-  total: number;
-  done: number;
-  dead: number;
-  retries: number;
-  throughput: number;
-  p50: number;
-  p95: number;
-  inFlight: number;
-  elapsed: number;
-  parallelism: number;
-  chaos: number;
-  items: ItemSnapshot[];
-  events: WireEvent[];
-};
+export type Snapshot = ServerSnapshot;
 
 export type DispatchOpts = {
   lines?: string[];
@@ -49,13 +17,46 @@ type State = {
   error: string | null;
   dispatching: boolean;
   dispatch: (opts: DispatchOpts) => Promise<string | null>;
-  watch: (id: string) => void;
   retryItem: (idx: number) => Promise<void>;
   stop: () => void;
   reset: () => void;
 };
 
-let timer: ReturnType<typeof setInterval> | null = null;
+let ctrl: AbortController | null = null;
+
+/* Read one run off the wire: the server streams a JSON snapshot per line and
+   closes when the queue has drained. `onSnap` gets every frame. */
+async function readRun(opts: DispatchOpts, signal: AbortSignal, onSnap: (s: Snapshot) => void): Promise<Snapshot | null> {
+  const res = await fetch("/api/runs", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(opts),
+    signal,
+  });
+  if (!res.ok || !res.body) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.error ?? "dispatch failed");
+  }
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "", last: Snapshot | null = null;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let nl: number;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line) continue;
+      const obj = JSON.parse(line);
+      if (obj.error) throw new Error(obj.error);
+      last = obj as Snapshot;
+      onSnap(last);
+    }
+  }
+  return last;
+}
 
 export const useRun = create<State>((set, get) => ({
   snap: null,
@@ -63,62 +64,57 @@ export const useRun = create<State>((set, get) => ({
   dispatching: false,
 
   dispatch: async (opts) => {
+    get().stop();
+    ctrl = new AbortController();
     set({ dispatching: true, error: null });
     try {
-      const res = await fetch("/api/runs", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(opts),
-      });
-      if (!res.ok) {
-        const e = await res.json().catch(() => ({}));
-        set({ error: e.error ?? "dispatch failed", dispatching: false });
-        return null;
-      }
-      const { runId } = await res.json();
+      const last = await readRun(opts, ctrl.signal, (snap) => set({ snap, dispatching: false, error: null }));
       set({ dispatching: false });
-      get().watch(runId);
-      return runId;
-    } catch {
-      set({ error: "network error", dispatching: false });
+      return last?.id ?? null;
+    } catch (err) {
+      if (ctrl?.signal.aborted) return null;
+      set({ error: err instanceof Error ? err.message : "network error", dispatching: false });
       return null;
     }
   },
 
-  watch: (id) => {
-    get().stop();
-    const poll = async () => {
-      try {
-        const res = await fetch(`/api/runs/${id}`);
-        if (!res.ok) {
-          if (res.status === 404) set({ error: "run not found (expired?)" });
-          return;
-        }
-        const snap = (await res.json()) as Snapshot;
-        set({ snap, error: null });
-        if (snap.status === "complete") get().stop(); // stop when drained
-      } catch {
-        /* transient network blip — keep polling */
-      }
-    };
-    poll();
-    timer = setInterval(poll, 500); // 500ms = smooth belt, tiny free-tier cost
-  },
-
+  /* A dead item goes back on the line as a run of one, with the same parallelism
+     and chaos; its frames are merged into the board under the original index. */
   retryItem: async (idx) => {
     const snap = get().snap;
-    if (!snap) return;
-    await fetch(`/api/runs/${snap.id}/retry`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ itemId: String(idx) }),
-    }).catch(() => {});
-    get().watch(snap.id); // resume polling if it had stopped on complete
+    const item = snap?.items.find((x) => x.idx === idx);
+    if (!snap || !item || item.status !== "dead") return;
+    ctrl = new AbortController();
+    const base = { ...snap, dead: snap.dead - 1, status: "running" as const };
+    set({ snap: base, error: null });
+    try {
+      await readRun({ lines: [item.text], parallelism: snap.parallelism, chaos: snap.chaos }, ctrl.signal, (mini) => {
+        const cur = get().snap;
+        if (!cur) return;
+        const m = mini.items[0];
+        const items = cur.items.map((x) => (x.idx === idx ? { ...m, idx, text: x.text, attempts: item.attempts + m.attempts } : x));
+        const finished = mini.status === "complete";
+        set({
+          snap: {
+            ...cur,
+            status: finished ? "complete" : "running",
+            done: cur.done + (finished && m.status === "done" ? 1 : 0),
+            dead: cur.dead + (finished && m.status === "dead" ? 1 : 0),
+            retries: cur.retries + (finished ? mini.retries : 0),
+            inFlight: items.filter((x) => x.status === "running").length,
+            items,
+            events: [...mini.events.map((e) => ({ ...e, msg: e.msg.replace(/item#0\b/g, `item#${idx}`).replace(/^run \S+/, "retry") })), ...cur.events].slice(0, 50),
+          },
+        });
+      });
+    } catch (err) {
+      if (!ctrl?.signal.aborted) set({ error: err instanceof Error ? err.message : "retry failed" });
+    }
   },
 
   stop: () => {
-    if (timer) clearInterval(timer);
-    timer = null;
+    if (ctrl) ctrl.abort();
+    ctrl = null;
   },
 
   reset: () => {

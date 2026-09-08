@@ -1,14 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { toPng } from "html-to-image";
-import { Download, Link2, FileJson, Check } from "lucide-react";
+import { Download, FileJson } from "lucide-react";
 import type { Snapshot } from "@/store/useRun";
 import { fmtMs, fmtThroughput, successRate } from "@/lib/format";
 
 export function Receipt({ snap }: { snap: Snapshot }) {
   const cardRef = useRef<HTMLDivElement>(null);
-  const [copied, setCopied] = useState(false);
 
   const rate = successRate(snap.done, snap.total);
 
@@ -21,15 +20,14 @@ export function Receipt({ snap }: { snap: Snapshot }) {
     a.click();
   }
 
-  async function copyPermalink() {
-    const url = `${window.location.origin}/run/${snap.id}`;
-    await navigator.clipboard.writeText(url).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1600);
-  }
-
+  // the results are already here: the last frame of the stream is the receipt
   function downloadJson() {
-    window.open(`/api/runs/${snap.id}?format=json`, "_blank");
+    const blob = new Blob([JSON.stringify(snap, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `conveyor-${snap.id}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
   const rows: [string, string][] = [
@@ -66,17 +64,12 @@ export function Receipt({ snap }: { snap: Snapshot }) {
         </div>
 
         <p className="mt-4 text-[9px] text-text-dim/70 tracking-wide">
-          serverless · QStash queue · Upstash Redis · no always-on worker · $0
+          serverless · own in-process queue · no broker, no database · no always-on worker
         </p>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <ReceiptBtn onClick={downloadPng} icon={<Download size={13} />} label="PNG" />
-        <ReceiptBtn
-          onClick={copyPermalink}
-          icon={copied ? <Check size={13} /> : <Link2 size={13} />}
-          label={copied ? "Copied" : "Link"}
-        />
         <ReceiptBtn onClick={downloadJson} icon={<FileJson size={13} />} label="JSON" />
       </div>
     </div>

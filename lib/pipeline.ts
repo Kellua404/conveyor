@@ -1,11 +1,10 @@
 import { createHash } from "crypto";
-import { redis } from "./redis";
-import { setStage, logEvent, itemKey, runKey } from "./run";
 
-export class PermanentError extends Error {} // poison → DLQ, never retried
-export class TransientError extends Error {} // chaos → retried with backoff
+export class PermanentError extends Error {} // poison: straight to the dead-letter lane, never retried
+export class TransientError extends Error {} // chaos: retried with backoff
 
-const STAGES = ["FETCH", "TRANSFORM", "VALIDATE"] as const;
+export const STAGES = ["FETCH", "TRANSFORM", "VALIDATE"] as const;
+export type Stage = (typeof STAGES)[number];
 
 export type Analysis = {
   words: number;
@@ -16,21 +15,21 @@ export type Analysis = {
 
 export type PipelineResult = Analysis & { checksum: string };
 
-// Genuine (cheap, local, $0) CPU work per item — no fake setTimeout-as-work, no
-// outbound calls. The only artificial delay is `tick()`, purely so stage
-// transitions are watchable on the belt.
-export async function runPipeline(run: string, i: string): Promise<PipelineResult> {
-  const item = await redis.hgetall<{ text: string }>(itemKey(run, i));
-  const text = (item?.text ?? "").trim();
-  const chaos = Number((await redis.hget(runKey(run), "chaos")) ?? 0);
-
+// Real, cheap CPU work per item. No outbound calls, nothing pretending to be work.
+// The only artificial delay is `tick()`, so each stage stays visible on the belt.
+export async function runPipeline(
+  text: string,
+  chaos: number,
+  onStage: (stage: Stage) => void
+): Promise<PipelineResult> {
   let normalized = "";
   let analysis: Analysis | null = null;
+  // chaos is the chance that one attempt fails somewhere; spread evenly over the stages
+  const pStage = 1 - Math.pow(1 - chaos / 100, 1 / STAGES.length);
 
   for (const stage of STAGES) {
-    await setStage(run, i, stage);
-    // inject a transient failure with probability = chaos% at a random stage
-    if (Math.random() * 100 < chaos) throw new TransientError(`flaky at ${stage}`);
+    onStage(stage);
+    if (Math.random() < pStage) throw new TransientError(`flaky at ${stage}`);
     await tick();
 
     if (stage === "FETCH") {
@@ -48,12 +47,11 @@ export async function runPipeline(run: string, i: string): Promise<PipelineResul
     }
   }
 
-  await logEvent(run, `item#${i} processed (${analysis?.words} words)`);
   return {
     ...(analysis as Analysis),
     checksum: createHash("sha256").update(normalized).digest("hex").slice(0, 12),
   };
 }
 
-// visible, not fake-long: 60–200ms so the belt reads as motion, not lag.
+// visible, not slow: 60 to 200 ms per stage so the belt reads as motion
 const tick = () => new Promise((r) => setTimeout(r, 60 + Math.random() * 140));

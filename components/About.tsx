@@ -62,10 +62,12 @@ export function About() {
               </button>
               <h2 className="font-display font-semibold text-text mb-3">What is this?</h2>
               <p className="text-sm text-text-dim leading-relaxed">
-                Every item is a real message on a real queue (Upstash QStash) that re-invokes
-                this Vercel function over HTTP — with server-enforced concurrency, automatic
-                retry/backoff, idempotent state, and a dead-letter lane. No always-on worker.
-                No paid services. Crank up the chaos and try to break it.
+                The queue is Conveyor&apos;s own. One serverless function holds the batch in
+                memory, a worker pool drains it at the parallelism you set, transient failures
+                go back on the line with exponential backoff, and poison or exhausted items
+                land in the dead-letter lane. Every state change streams to this page as it
+                happens. No message broker, no database, no account with anyone. Crank up the
+                chaos and try to break it.
               </p>
             </div>
           </div>,

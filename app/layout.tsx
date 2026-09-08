@@ -17,7 +17,7 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Conveyor — a job pipeline you can watch",
   description:
-    "A real serverless message queue (Upstash QStash) re-invokes a Vercel function for every item — with server-enforced concurrency, automatic retry/backoff, idempotent state, and a dead-letter lane. No always-on worker. $0.",
+    "A job queue Conveyor runs itself, inside one serverless function: a worker pool with a parallelism dial, retries with backoff, a dead-letter lane, and every state change streamed live. No message broker, no database, no always-on worker.",
   metadataBase: new URL("https://conveyor.vercel.app"),
   openGraph: {
     title: "Conveyor — a job pipeline you can watch",

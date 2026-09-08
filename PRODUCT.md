@@ -21,11 +21,15 @@ Each item is then processed through a fixed pipeline of named stages
 (`QUEUED → FETCH → TRANSFORM → VALIDATE → DONE`), and you watch the items physically
 travel across a belt, lane by lane, live.
 
-The machinery underneath is the point: a **serverless message queue** (Upstash QStash)
-delivers each item to a Vercel function over HTTP, with **server-enforced concurrency**,
-**automatic retries with backoff**, a **dead-letter lane** for poison items, and
-**idempotent** state transitions in Redis. There is **no long-running worker process** —
-the whole pipeline is stitched from short-lived serverless invocations, the modern way.
+The machinery underneath is the point: **Conveyor's own queue**, running inside one
+serverless function. A worker pool drains it with **bounded concurrency**, transient
+failures go back on the line with **exponential backoff**, poison and exhausted items land
+in a **dead-letter lane**, and every state change **streams** to the page as a frame.
+There is **no message broker, no database, no long-running worker** and nothing to
+sign up for.
+
+> Revised 2026-09-08. The first version leaned on Upstash QStash and Redis; the free-tier
+> database was deleted and the demo died with it. Owner decision: no third-party services.
 
 A precise **telemetry panel** proves it's real: live throughput (items/s), success/fail/
 dead counts, p50/p95 stage latency, total retries, the queue's parallelism setting, and
@@ -40,7 +44,7 @@ a streaming **wire log** of every state transition.
 - **Recruiters / backend engineers** evaluating the portfolio — Conveyor is proof of
   **distributed-systems** literacy: queues, bounded concurrency/backpressure, retry &
   backoff, dead-letter handling, idempotency, and at-least-once delivery — implemented
-  the *serverless-native* way (no rented worker, no paid queue, all on Vercel for $0).
+  with nothing rented and nothing external: one function, one stream.
 - **Curious visitors** who'll stay because watching a swarm of jobs flow, stall, retry,
   and recover on a calm control board is genuinely satisfying to operate.
 - **Anyone who's run real systems** and will immediately recognize that the chaos dial +
@@ -72,9 +76,9 @@ a streaming **wire log** of every state transition.
   portfolio never reuses a pairing.
 - **Anti-brand:** NOT a generic SaaS dashboard. No Inter/Roboto, no rounded pastel cards,
   no "Tasks ✅" to-do aesthetic, no fake progress bar that just animates to 100%, no
-  hidden `setTimeout` pretending to be work. The queue is **real** (QStash actually
-  re-invokes the function), the failures are **real**, the retries are **real**, and we
-  show the receipts.
+  hidden `setTimeout` pretending to be work. The queue is **real** (a worker pool, a
+  backoff schedule, a dead-letter lane), the failures are **real**, the retries are **real**,
+  and we show the receipts.
 
 ## Design principles (in priority order)
 
@@ -84,16 +88,16 @@ a streaming **wire log** of every state transition.
 2. **Resilience is the hero. Make failure visible.** The chaos dial + retry + dead-letter
    lane are the centerpiece, not an edge case. A visitor should be able to *break* the
    system on purpose and watch it stay calm and recover.
-3. **Show the engine, don't fake it.** Real QStash delivery, real Redis state, honest
+3. **Show the engine, don't fake it.** A real worker pool, real backoff, honest
    telemetry (throughput, p50/p95, attempt counts). We never animate a result we didn't
-   actually compute. "No always-on worker, all serverless, $0" is a fact we surface.
+   actually compute. "No broker, no database, no always-on worker" is a fact we surface.
 4. **Calm under load.** Even with 40 items and 30% chaos, motion stays composed and
    legible. A control room is unhurried *because* it's in control. (Contrast Creeper's
    maximalism; sibling to Resonance's calm, different domain.)
 5. **Operable, not just watchable.** Real controls (parallelism, chaos, manual retry of a
    dead item, re-run) — it's an instrument you *drive*, not a demo you press play on.
 6. **Honest output + fast and inclusive.** A real run-receipt (counts, latencies, success
-   rate) as a shareable card + permalink + downloadable results JSON. Cold-start handled
+   rate) as a shareable card + downloadable results JSON. Cold-start handled
    gracefully, AA accessible, reduced-motion respected, works without heavy GPU tricks.
 
 ## Success looks like
@@ -109,8 +113,7 @@ a streaming **wire log** of every state transition.
 
 ## Explicit non-goals (v1)
 
-Accounts/auth, persisting runs forever (Redis TTL is fine), arbitrary outbound fetching
+Accounts/auth, persisting runs at all (a run lives as long as its stream), arbitrary outbound fetching
 of user URLs (SSRF risk — item "work" stays local/CPU-bound and safe), processing huge
 batches (cap at a demo-sane N), a generic workflow builder, multi-tenant queues, exactly-
-once semantics (we do **idempotent at-least-once**, the honest real-world model), any paid
-service. Several live in `PLAN.md` §15 as stretch goals. Keep v1 small and perfect.
+once semantics, any external service. Several live in `PLAN.md` §15 as stretch goals. Keep v1 small and perfect.

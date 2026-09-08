@@ -1,54 +1,54 @@
 # Conveyor
 
-> A job pipeline you can watch — serverless queue, retries, dead-letter, observable end to end. Next.js + QStash + Redis.
+> A job pipeline you can watch. Its own queue, retries with backoff, a dead-letter lane, every state change streamed live. Next.js on Vercel, nothing else.
 
 **[Live demo](https://conveyor.ayoubalkak.com)** · part of [my portfolio](https://ayoubalkak.com)
 
 ![Conveyor](docs/poster.jpg)
 
 **A job pipeline you can watch.** Dispatch a batch of work and see every item ride the
-belt through each stage — fetch, transform, validate — failing, retrying, and recovering
-in real time. Built entirely serverless on Vercel: **no always-on worker, no paid
-services**.
+belt through each stage, fetch, transform, validate, failing, retrying and recovering in
+real time. The queue is Conveyor's own. There is no message broker, no database and no
+account with any third party: the whole run happens inside one serverless function and
+streams to the page as it goes.
 
-> Portfolio project **B2** (backend). Where Resonance (B1) proved *"a real model
-> server-side,"* Conveyor proves *distributed systems*: queues, bounded concurrency,
-> retry/backoff, dead-letter handling, idempotency, and at-least-once delivery — done the
-> serverless-native way.
+> Portfolio project B2 (backend). Where Resonance (B1) proved a real model can run
+> server-side, Conveyor shows the mechanics of a work queue: bounded concurrency,
+> retry with backoff, dead-letter handling, honest telemetry.
 
 ---
 
-## How it actually works
+## How it works
 
-Every item is a **real message on a real queue** ([Upstash QStash](https://upstash.com/docs/qstash)).
-QStash re-invokes the Vercel function `POST /api/worker` over HTTP for each item, with:
+`POST /api/runs` receives the batch and answers with a stream of newline-delimited JSON.
+Inside that one invocation:
 
-- **Server-enforced concurrency** — every message is published with a shared QStash
-  **flow-control key**, so QStash caps how many run at once (`parallelism` = backpressure)
-  while retrying each message **independently** — no FIFO head-of-line blocking, so one
-  retrying item never freezes the rest. Set parallelism = 1 vs 2 to see the cap. (The
-  QStash **free tier caps parallelism at 2**, so the dial is 1–2 — enough to see
-  backpressure while honoring the no-paid-services constraint.)
-- **Automatic retry with backoff** — a transient failure returns `500`; QStash redelivers
-  with backoff. The **chaos %** dial injects transient failures so you can watch the
-  system recover.
-- **Idempotent state** — an atomic Redis Lua `claim` script ensures only one invocation
-  processes an item, so QStash's at-least-once delivery never double-counts.
-- **Dead-letter lane** — *poison* items (too short to validate) go straight to DEAD;
-  items that exhaust their retries land there too. Each is manually retryable.
-
-State lives in **Upstash Redis** (REST, serverless-friendly). The UI polls a compact
-snapshot every 500ms and renders the board, telemetry, and wire log as a pure function of
-that snapshot. There is **no long-running process** — the whole pipeline is stitched from
-short-lived serverless invocations.
+- **A worker pool** of `parallelism` workers drains an in-memory queue. Set it to 1 and
+  watch the line back up; set it to 8 and watch it drain.
+- **Retry with exponential backoff.** A transient failure puts the item back on the queue
+  with a "not before" time: 250 ms, then 500, then 1000. Four tries in total. The
+  **chaos** dial is the chance that one attempt fails somewhere in its three stages.
+- **Dead-letter lane.** Poison items (too short to validate) go straight to DEAD, never
+  retried. Items that exhaust their tries land there too. Each one can be sent back on the
+  line by hand: the page dispatches it as a run of one and merges the result under the
+  original index.
+- **A budget.** A run gets 50 s of wall clock, under the function's 60 s limit. Anything
+  still queued when it expires is dead-lettered with the reason `deadline`. Closing the
+  page aborts the stream and the run stops.
+- **Snapshots on the wire.** The queue coalesces state changes into one frame every
+  120 ms: counts, throughput, p50/p95, the items, the event log. The board, the telemetry
+  and the wire log are pure functions of the latest frame. The last frame is the receipt,
+  which you can save as PNG or JSON.
 
 ```
 QUEUED → FETCH → TRANSFORM → VALIDATE → DONE        (+ DEAD-LETTER lane)
 ```
 
-The per-item work (normalize → word/readability analysis → SHA-256 checksum) is **real
-CPU work**, not a faked `setTimeout`. A small 60–200ms tick per stage exists only so the
-belt is watchable.
+The per-item work (normalise, word and readability analysis, SHA-256 checksum) is real CPU
+work. A 60 to 200 ms tick per stage exists only so the belt is watchable.
+
+There is no persistence by design: a run lives exactly as long as its stream. That is what
+lets the project run with zero services and zero configuration.
 
 ---
 
@@ -56,126 +56,49 @@ belt is watchable.
 
 | Choice | Why |
 | --- | --- |
-| **Next.js 14 (App Router), TypeScript** | API Route Handlers = the serverless backend; one repo, one deploy. |
-| **Upstash QStash** | The hero: an HTTP message queue with retries/backoff + queue parallelism. Serverless-native, free tier. |
-| **Upstash Redis** | REST Redis usable from serverless functions. Holds run/item state, counters, event log. Free tier. |
-| **Zustand** | Tiny client store for the polled snapshot + UI dials. |
-| **Framer Motion** | Shared-layout animation — tiles glide between lanes like cargo. |
+| **Next.js 14 (App Router), TypeScript** | One route handler is the whole backend; one repo, one deploy. |
+| **Streaming responses** | The function pushes frames while it works; no polling, no store. |
+| **Zustand** | Tiny client store for the latest frame and the dials. |
+| **Framer Motion** | Shared-layout animation: tiles glide between lanes like cargo. |
 | **Tailwind CSS** | Control-room styling with design tokens. |
-| **html-to-image** | Client-side PNG export of the run receipt (no server render). |
-| **Space Grotesk + JetBrains Mono** | Engineered display + true console mono. |
+| **html-to-image** | Client-side PNG export of the run receipt. |
+| **Space Grotesk + JetBrains Mono** | Engineered display face and a true console mono. |
 
 ---
 
 ## Local development
 
-> **The one true gotcha:** QStash invokes a **public URL**. It cannot reach `localhost`
-> on its own. Locally you must run the QStash CLI dev server, which *can* reach localhost
-> and prints local signing keys to use.
-
 ```bash
-# 1. Install
 npm install
-
-# 2. Configure secrets
-cp .env.local.example .env.local
-#   Fill UPSTASH_REDIS_REST_URL / _TOKEN from the Upstash console.
-
-# 3. Start the QStash dev server (reaches localhost; prints local QSTASH_* values)
-npx @upstash/qstash-cli dev
-#   Copy the printed QSTASH_TOKEN + signing keys into .env.local.
-#   Leave CONVEYOR_APP_URL empty locally.
-
-# 4. Run the app
-npm run dev      # http://localhost:3000
+npm run dev        # http://localhost:3000
 ```
 
-Then dispatch a batch (e.g. 30 items, parallelism 3, chaos 25%) and watch the belt.
+No environment variables. Nothing to sign up for.
 
 ### Scripts
 
-- `npm run dev` — dev server
-- `npm run build` — production build
-- `npm run typecheck` — `tsc --noEmit`
-- `npm run lint` — Next.js ESLint
+`npm run dev`, `npm run build`, `npm run start`, `npm run lint`, `npm run typecheck`.
 
 ---
 
 ## Deploy (Vercel)
 
-1. Push to GitHub. (`.gitignore` already excludes `.env*` — secrets live only in
-   `.env.local` / Vercel env, never committed.)
-2. Import the repo into **Vercel**.
-3. Add the env vars in Vercel: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`,
-   `QSTASH_TOKEN`, `QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY`, and — **if your
-   Upstash account is in a non-default region** — `QSTASH_URL` (e.g.
-   `https://qstash-us-east-1.upstash.io`; see Troubleshooting). Set `CONVEYOR_APP_URL` to
-   the production domain (otherwise `VERCEL_URL` is used).
-   > Use the **production** QStash token + signing keys here, *not* the dev-server ones.
-4. Deploy (`vercel --prod` from the CLI, or via the Git integration), then smoke-test on
-   the live URL: dispatch ~12 items @ parallelism 2, chaos ~10% — confirm items drain,
-   retries (violet flashes) recover, dead-letter, and the receipt.
+`vercel deploy --prod`. There is nothing to configure: no env vars, no integrations. The
+route sets `maxDuration = 60`, which the Hobby plan allows.
 
----
+## Limits
 
-## Free-tier notes / limits
+- Batches are capped at **50 items** and parallelism at **8**, so a run always finishes
+  inside its budget.
+- A run is not addressable after it ends. Save the receipt if you want to keep it.
 
-- Batches are capped at **50 items**; queue **parallelism caps at 2** (QStash free-tier
-  quota); the snapshot poll runs at **500ms**; runs **TTL at 24h** in Redis — all to stay
-  comfortably inside free tiers.
-- Queue parallelism is **queue-global** (single `conveyor` queue) — fine for a
-  single-user demo. (Stretch: queue-per-run.)
-- Cold starts: the first dispatch may lag while the function spins up; the UI shows a calm
-  "Cold start — waiting for the first delivery…" state, never a fake progress bar.
+## History
 
----
-
-## Troubleshooting / Operations
-
-> A field guide to the gotchas already hit, so future changes are quick to debug.
-> Diagnose QStash directly via its REST API at **your `QSTASH_URL`** (see below):
-> `GET /v2/queues/conveyor` (depth = `lag`) and `GET /v2/events?queueName=conveyor`
-> (per-delivery `state`/`responseStatus`), both with `Authorization: Bearer $QSTASH_TOKEN`.
-
-**Dispatch returns 500 with `quota maxParallelism`.**
-The QStash **free tier caps queue parallelism at 2**. The dial is clamped to 1–2 in
-`lib/constants.ts` (`MAX_PARALLELISM`). If you upgrade the QStash plan, raise that constant.
-
-**Dispatch returns 500 / enqueue fails with `user not found in this region`.**
-Your Upstash account lives in a specific region and the **canonical `https://qstash.upstash.io`
-won't route to it**. Set `QSTASH_URL` to the regional endpoint (e.g.
-`https://qstash-us-east-1.upstash.io`) — the SDK reads `QSTASH_URL` as its base URL. This
-must be set in `.env.local` **and** in Vercel's production env. (Find the right URL in the
-Upstash QStash console's `.env` snippet.)
-
-**Items enqueue but nothing moves on the board for a while, then drains in bursts.**
-Two causes, both addressed:
-- *Head-of-line blocking (fixed):* we originally used an **ordered QStash queue**
-  (`queue.enqueueJSON`), where a single retrying message blocks everything behind it during
-  its backoff — under chaos the board looked frozen. Now we publish with a **flow-control
-  key** (`qstash.publishJSON({ flowControl: { key, parallelism } })`), which keeps the
-  concurrency cap but retries each message independently. If you ever reintroduce a queue,
-  expect this behavior back.
-- *Free-tier delivery (inherent):* the cold start before the first delivery can take ~1 min,
-  and free-tier throughput is modest. Keep `DEFAULT_CHAOS` low and batches small; a paid
-  QStash plan raises the limits.
-
-**QStash calls the worker but it 401s (`bad signature`) every time.**
-The signing keys are wrong/mismatched. Ensure `QSTASH_CURRENT_SIGNING_KEY` /
-`QSTASH_NEXT_SIGNING_KEY` in Vercel match the **production** keys (not the `qstash-cli dev`
-keys, which only belong in `.env.development.local`).
-
-**QStash can't reach the worker at all (no `POST /api/worker` in Vercel logs).**
-`CONVEYOR_APP_URL` must be a **public** URL. In prod that's the Vercel domain; locally you
-must run `npx @upstash/qstash-cli dev` (QStash can't reach `localhost` otherwise). Also
-confirm Vercel **Deployment Protection** isn't gating the production URL.
-
-**Clear a stuck/backlogged queue (e.g. after heavy testing):**
-`curl -X DELETE "$QSTASH_URL/v2/queues/conveyor" -H "Authorization: Bearer $QSTASH_TOKEN"`
-— the app recreates the queue (via `upsert`) on the next dispatch.
-
-**Redeploy after a change:** `vercel --prod --yes` (env vars persist on Vercel). Env vars
-live only in `.env.local` (local) and Vercel's encrypted store — never committed.
+The first version (June 2026) used Upstash QStash as the queue and Upstash Redis for
+state, with an idempotent claim script so at-least-once delivery never double-counted.
+The free-tier database was deleted after a period of inactivity and the demo died with
+it. This version removes the dependency entirely: the queue, the pool and the state all
+live in the function, and the stream replaces polling.
 
 ---
 
@@ -185,18 +108,13 @@ live only in `.env.local` (local) and Vercel's encrypted store — never committ
 app/
   layout.tsx                  fonts, tokens, metadata
   page.tsx                    control room
-  run/[id]/page.tsx           permalink (live board or receipt)
-  api/
-    runs/route.ts             POST: create run + enqueue
-    runs/[id]/route.ts        GET: snapshot (+ ?format=json export)
-    runs/[id]/retry/route.ts  POST: manual retry of a dead item
-    worker/route.ts           POST: the heart — QStash calls this per item
+  api/runs/route.ts           POST: run the batch, stream frames
 lib/
-  redis.ts qstash.ts          clients
-  run.ts                      idempotent state machine (claim, transitions)
+  queue.ts                    the queue: worker pool, backoff, dead letter, snapshots
   pipeline.ts                 real per-stage work + chaos + poison
+  constants.ts                caps and budget
   format.ts samples.ts        helpers
-store/useRun.ts               polling store
+store/useRun.ts               reads the stream, merges manual retries
 components/                   Console, Board, Lane, ItemTile, Telemetry,
-                              Wire, DeadLetter, Receipt, Wordmark, About, …
+                              Wire, DeadLetter, Receipt, Wordmark, About
 ```
